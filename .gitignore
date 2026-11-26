@@ -1,0 +1,5 @@
+*.json
+!firebase.json
+!manifest.json
+node_modules/
+.env

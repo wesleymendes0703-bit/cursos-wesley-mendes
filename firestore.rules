@@ -1,0 +1,19 @@
+rules_version = '2';
+// Cursos do Prof. Wesley Mendes. Aluno lê e grava só o próprio progresso. O professor lê todos e publica avisos.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function logado() { return request.auth != null && request.auth.token.email_verified == true; }
+    function prof() { return logado() && request.auth.token.email.lower() == 'wesleymendes0703@gmail.com'; }
+
+    match /progress/{uid} {
+      allow read: if prof() || (logado() && request.auth.uid == uid);
+      allow create, update: if logado() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['lessons', 'quiz', 'rev', 'name', 'email', 'updated']);
+      allow delete: if prof();
+    }
+    match /avisos/{id} {
+      allow read: if logado();
+      allow write: if prof();
+    }
+  }
+}

@@ -1,0 +1,51 @@
+# Publica o app no Firebase Hosting e as regras do Firestore a cada envio para a branch main.
+# Secrets necessários (Settings › Secrets and variables › Actions):
+#   FIREBASE_PROJECT_ID       -> o projectId do projeto dos cursos
+#   FIREBASE_SERVICE_ACCOUNT  -> conteúdo inteiro do .json da conta de serviço
+name: Publicar no Firebase
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Conferir secrets
+        env:
+          PID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          [ -n "$PID" ] || { echo "::error title=Secret faltando::FIREBASE_PROJECT_ID não está configurado"; exit 1; }
+          [ -n "$SA" ] || { echo "::error title=Secret faltando::FIREBASE_SERVICE_ACCOUNT não está configurado"; exit 1; }
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          node -e "const j=JSON.parse(require('fs').readFileSync(process.env.RUNNER_TEMP+'/sa.json','utf8')); if(!j.client_email||!j.private_key) throw 0; console.log('Conta de serviço:', j.client_email)" \
+            || { echo "::error title=Secret inválido::FIREBASE_SERVICE_ACCOUNT não é um JSON de conta de serviço válido (copie o arquivo inteiro)"; exit 1; }
+      - name: Instalar Firebase CLI
+        id: cli
+        run: npm i -g firebase-tools@13 >/dev/null 2>&1 && firebase --version
+      - name: Publicar site (Hosting)
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          set -o pipefail
+          firebase deploy --only hosting --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive 2>&1 | tee "$RUNNER_TEMP/h.log" \
+            || { grep -iE "error|denied|not|failed" "$RUNNER_TEMP/h.log" | head -8 | while read -r l; do echo "::error title=Hosting::$l"; done; exit 1; }
+      # Opcional: só funciona se a conta de serviço tiver o papel "Firebase Rules Admin".
+      # Sem ele, cole o firestore.rules à mão no Console (Firestore › Regras).
+      - name: Publicar regras do Firestore
+        if: always() && steps.cli.outcome == 'success'
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          set -o pipefail
+          firebase deploy --only firestore:rules --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive 2>&1 | tee "$RUNNER_TEMP/r.log" \
+            || { grep -iE "error|denied|not|failed" "$RUNNER_TEMP/r.log" | head -8 | while read -r l; do echo "::warning title=Regras (cole à mão no Console)::$l"; done; exit 1; }
+      - name: Apagar credenciais
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
