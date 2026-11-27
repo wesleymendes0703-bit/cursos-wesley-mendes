@@ -58,7 +58,7 @@
         botaoSair();
         if (email !== PROF) {
           let ok = false, erro = '';
-          try { ok = (await db.doc('acessos/' + email).get()).exists; } catch (e) { erro = e.code || 'erro'; }
+          try { const d = await db.doc('acessos/' + email).get(); ok = d.exists; if (ok) { const c = d.data().cursos; window.CURSOS_LIBERADOS = Array.isArray(c) ? c : null; } } catch (e) { erro = e.code || 'erro'; }
           if (!ok) { telaPendente(email, erro); return; }
         }
         res({u, db});

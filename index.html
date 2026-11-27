@@ -262,6 +262,7 @@ async function init(){
       try{const m=await user.me();ctx.name=(m&&m.name)||'';ctx.email=(m&&m.email)||''}catch(e){}
       try{const w=await user.can('data.write');ctx.canWrite=(w===true)}catch(e){ctx.canWrite=false}
     }
+    if(!ctx.admin&&Array.isArray(window.CURSOS_LIBERADOS)){for(let i=C.length-1;i>=0;i--)if(!window.CURSOS_LIBERADOS.includes(C[i].id)){delete CB[C[i].id];C.splice(i,1)}}
     LS='geo-pm-progress-v2-'+(ctx.uid||'anon');
     const loc=lsRead();if(loc&&loc.lessons)S={lessons:loc.lessons,quiz:loc.quiz||{},rev:loc.rev||{}};
     if(db&&ctx.uid){
@@ -544,7 +545,7 @@ function lessonTpl(l,c,id){
   return{title,kind,pos,practice,outline,html:w.innerHTML+prova}
 }
 function vLicao(m,id){
-  const l=Object.prototype.hasOwnProperty.call(LES,id)?LES[id]:null;if(!l||(l.draft&&!ctx.admin)){location.replace('#home');return}const c=CB[l.course];const d=LD(id);
+  const l=Object.prototype.hasOwnProperty.call(LES,id)?LES[id]:null;if(!l||(l.draft&&!ctx.admin)){location.replace('#home');return}const c=CB[l.course];if(!c){location.replace('#home');return}const d=LD(id);
   if(l.draft){m.innerHTML=`<p><a href="#curso-${c.id}">← ${esc(c.titulo)}</a></p><span class="pill or">Rascunho · só professor</span><h1>${esc(l.title)}</h1><article class="lesson">${l.html}</article>`;return}
   setLast(c.id,'#licao-'+id);
   const k=c.flow.findIndex(x=>x[1]===id);const n=c.flow[k+1];
@@ -557,7 +558,7 @@ function vLicao(m,id){
 }
 const LET='ABCDE';
 function vQuestao(m,id){
-  const q=Object.prototype.hasOwnProperty.call(QS,id)?QS[id]:null;if(!q){location.replace('#home');return}const c=CB[q.course];let pick=null;setLast(c.id,'#questao-'+id);
+  const q=Object.prototype.hasOwnProperty.call(QS,id)?QS[id]:null;if(!q){location.replace('#home');return}const c=CB[q.course];if(!c){location.replace('#home');return}let pick=null;setLast(c.id,'#questao-'+id);
   const hasText=q.alts.length>0;
   const imgs=q.imgs.map(k=>`<img class="qimg" src="${DATA.qimg[k]||''}" alt="Imagem da questão ${q.n}: ${esc(q.tema)}">`).join('');
   const badge=q.badge==='oficial'?'<span class="pill ok">Gabarito oficial</span>':q.badge==='deduzido'?'<span class="pill or">Gabarito deduzido</span>':'<span class="pill">Gabarito comentado pelo professor</span>';
@@ -596,7 +597,7 @@ function vProg(m){
 }
 function vProf(m){
   if(!ctx.admin){m.innerHTML='<div class="card"><b>Área restrita.</b> Só o professor acessa este painel.</div>';return}
-  m.innerHTML=`<h1>Painel do professor</h1><div id="pa" class="stats"></div><h2>Aviso para a turma</h2><div class="card"><label for="av">Texto do aviso (aparece na página inicial dos alunos)</label><textarea id="av" rows="2" maxlength="300"></textarea><p><button class="btn" id="avs">Publicar aviso</button> <span id="avm" role="status"></span></p><div id="avl"></div></div>${window.PROF_EMAIL?`<h2>Acesso dos alunos</h2><div class="card"><label for="ac">E-mails Google liberados (um por linha)</label><textarea id="ac" rows="3" placeholder="aluno@gmail.com"></textarea><p><button class="btn" id="acs">Liberar</button> <span id="acm" role="status"></span></p><div id="acl"></div></div>`:''}<h2>Alunos</h2><div id="tb">Carregando…</div><h2>Desempenho por curso</h2><div id="cs"></div><h2>Desempenho por questão</h2><div id="qs"></div>`;
+  m.innerHTML=`<h1>Painel do professor</h1><div id="pa" class="stats"></div><h2>Aviso para a turma</h2><div class="card"><label for="av">Texto do aviso (aparece na página inicial dos alunos)</label><textarea id="av" rows="2" maxlength="300"></textarea><p><button class="btn" id="avs">Publicar aviso</button> <span id="avm" role="status"></span></p><div id="avl"></div></div>${window.PROF_EMAIL?`<h2>Acesso dos alunos</h2><div class="card"><label for="ac">E-mails Google liberados (um por linha)</label><textarea id="ac" rows="3" placeholder="aluno@gmail.com"></textarea><fieldset style="border:0;padding:0;margin:8px 0"><legend>Cursos liberados para esses e-mails</legend>${C.map(c=>`<label style="display:inline-flex;gap:6px;margin-right:14px;align-items:center"><input type="checkbox" class="acc" value="${c.id}" ${c.id==='geo'?'checked':''}> ${esc(c.titulo)}</label>`).join('')}</fieldset><p><button class="btn" id="acs">Liberar</button> <span id="acm" role="status"></span></p><div id="acl"></div></div>`:''}<h2>Alunos</h2><div id="tb">Carregando…</div><h2>Desempenho por curso</h2><div id="cs"></div><h2>Desempenho por questão</h2><div id="qs"></div>`;
   let rows=[];const names={};
   const tm=setTimeout(()=>{$('#tb').textContent='Sem resposta do banco ainda. Se ninguém salvou progresso, a lista fica vazia.'},10000);
   const cnt=d=>{const nl=Object.values(d.lessons||{}).filter(v=>v>0).length;const qz=Object.entries(d.quiz||{}).filter(([k,v])=>v&&!v.x);return{nl,nq:qz.length,ok:qz.filter(([k,v])=>v.ok).length}};
@@ -618,8 +619,8 @@ function vProf(m){
     cleanup.push(ctx.db.collection('avisos').orderBy('t','desc').limit(5).onSnapshot(s=>{const el=$('#avl');if(!el)return;el.innerHTML='';s.docs.forEach(d=>{const p=document.createElement('p');p.textContent=d.data().texto+' ';const b=document.createElement('button');b.className='btn ghost';b.textContent='Remover';b.setAttribute('aria-label','Remover aviso: '+(d.data().texto||'').slice(0,40));b.onclick=async()=>{try{await ctx.db.doc('avisos/'+d.id).delete()}catch(e){$('#avm').textContent='Erro ao remover: '+(e&&e.code)}};p.appendChild(b);el.appendChild(p)})},()=>{}));
     $('#avs').onclick=async()=>{const t=$('#av').value.trim();if(!t)return;try{await ctx.db.collection('avisos').add({texto:t,t:Date.now()});$('#av').value='';$('#avm').textContent='Publicado.'}catch(e){$('#avm').textContent='Erro: '+(e&&e.code)}};
     if(window.PROF_EMAIL){
-      cleanup.push(ctx.db.collection('acessos').onSnapshot(s=>{const el=$('#acl');if(!el)return;el.innerHTML='';const ids=s.docs.map(d=>d.id).sort();if(!ids.length)el.textContent='Nenhum aluno liberado ainda.';ids.forEach(id=>{const p=document.createElement('p');p.textContent=id+' ';const b=document.createElement('button');b.className='btn sec';b.textContent='Remover';b.setAttribute('aria-label','Remover acesso de '+id);b.onclick=()=>{if(confirm('Remover o acesso de '+id+'?'))ctx.db.doc('acessos/'+id).delete().catch(e=>{$('#acm').textContent='Erro: '+(e&&e.code)})};p.appendChild(b);el.appendChild(p)})},e=>{const el=$('#acl');if(el)el.textContent='Erro ao ler acessos: '+(e&&e.code)}));
-      $('#acs').onclick=async()=>{const ids=[...new Set($('#ac').value.toLowerCase().split(/[\s,;]+/).filter(x=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];if(!ids.length){$('#acm').textContent='Digite ao menos um e-mail válido.';return}try{for(const id of ids)await ctx.db.doc('acessos/'+id).set({criadoEm:Date.now()});$('#ac').value='';$('#acm').textContent=ids.length+' liberado(s).'}catch(e){$('#acm').textContent='Erro: '+(e&&e.code)}};
+      cleanup.push(ctx.db.collection('acessos').onSnapshot(s=>{const el=$('#acl');if(!el)return;el.innerHTML='';const ids=s.docs.map(d=>d.id).sort();if(!ids.length)el.textContent='Nenhum aluno liberado ainda.';ids.forEach(id=>{const p=document.createElement('p');const cs=(d=>Array.isArray(d.cursos)?d.cursos.map(x=>(CB[x]||{}).titulo||x).join(', '):'todos os cursos')(s.docs.find(z=>z.id===id).data());p.textContent=id+' · '+cs+' ';const b=document.createElement('button');b.className='btn sec';b.textContent='Remover';b.setAttribute('aria-label','Remover acesso de '+id);b.onclick=()=>{if(confirm('Remover o acesso de '+id+'?'))ctx.db.doc('acessos/'+id).delete().catch(e=>{$('#acm').textContent='Erro: '+(e&&e.code)})};p.appendChild(b);el.appendChild(p)})},e=>{const el=$('#acl');if(el)el.textContent='Erro ao ler acessos: '+(e&&e.code)}));
+      $('#acs').onclick=async()=>{const ids=[...new Set($('#ac').value.toLowerCase().split(/[\s,;]+/).filter(x=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];if(!ids.length){$('#acm').textContent='Digite ao menos um e-mail válido.';return}const cur=[...document.querySelectorAll('.acc:checked')].map(x=>x.value);if(!cur.length){$('#acm').textContent='Marque ao menos um curso.';return}try{for(const id of ids)await ctx.db.doc('acessos/'+id).set({criadoEm:Date.now(),cursos:cur});$('#ac').value='';$('#acm').textContent=ids.length+' liberado(s).'}catch(e){$('#acm').textContent='Erro: '+(e&&e.code)}};
     }
   }else{$('#tb').textContent='Banco indisponível nesta visualização.'}
 }
