@@ -23,6 +23,18 @@ service cloud.firestore {
         && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120));
       allow delete: if prof();
     }
+    // chave de cada curso: só o professor e quem foi liberado naquele curso
+    function curso(id) {
+      return prof() || (logado() && exists(/databases/$(database)/documents/acessos/$(request.auth.token.email.lower()))
+        && (!('cursos' in get(/databases/$(database)/documents/acessos/$(request.auth.token.email.lower())).data)
+            || id in get(/databases/$(database)/documents/acessos/$(request.auth.token.email.lower())).data.cursos));
+    }
+    match /chaves/{id} {
+      allow get: if curso(id);
+      allow list: if false;
+      allow create, update: if prof() && request.resource.data.keys().hasOnly(['k']) && request.resource.data.k is string;
+      allow delete: if prof();
+    }
     match /avisos/{id} {
       allow read: if liberado();
       allow write: if prof();

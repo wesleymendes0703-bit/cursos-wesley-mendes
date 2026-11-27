@@ -76,6 +76,23 @@
       profiles: async () => ({})
     };
   }
+  // Conteúdo dos cursos: arquivos criptografados (dados/<id>.enc). A chave de cada curso fica no Firestore e só é entregue a quem foi liberado.
+  window.CARREGAR_CURSOS = async (ids, db) => {
+    const out = {};
+    const b64 = t => Uint8Array.from(atob(t.trim()), ch => ch.charCodeAt(0));
+    await Promise.all(ids.map(async id => {
+      try {
+        const kd = await db.doc('chaves/' + id).get();
+        if (!kd.exists) return;
+        const [r, key] = await Promise.all([fetch('dados/' + id + '.enc', {cache: 'no-cache'}), crypto.subtle.importKey('raw', b64(kd.data().k), 'AES-GCM', false, ['decrypt'])]);
+        if (!r.ok) return;
+        const raw = b64(await r.text());
+        const pt = await crypto.subtle.decrypt({name: 'AES-GCM', iv: raw.slice(0, 12)}, key, raw.slice(12));
+        out[id] = JSON.parse(new TextDecoder().decode(pt));
+      } catch (e) { /* sem chave ou sem permissão: o curso não aparece */ }
+    }));
+    return out;
+  };
   window.claude = {use: async n => {
     const s = await boot();
     if (n === 'db') return s ? s.db : null;
