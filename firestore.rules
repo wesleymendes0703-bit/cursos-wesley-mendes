@@ -11,12 +11,17 @@ service cloud.firestore {
     match /acessos/{e} {
       allow get: if logado() && (e == request.auth.token.email.lower() || prof());
       allow list: if prof();
-      allow create, update, delete: if prof();
+      allow create, update: if prof() && request.resource.data.keys().hasOnly(['criadoEm', 'cursos'])
+        && (!('cursos' in request.resource.data) || (request.resource.data.cursos is list && request.resource.data.cursos.size() <= 20));
+      allow delete: if prof();
     }
     match /progress/{uid} {
       allow read: if prof() || (liberado() && request.auth.uid == uid);
       allow create, update: if liberado() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['lessons', 'quiz', 'rev', 'name', 'email', 'updated']);
+        && request.resource.data.keys().hasOnly(['lessons', 'quiz', 'rev', 'name', 'email', 'updated'])
+        && (!('email' in request.resource.data) || request.resource.data.email == '' || request.resource.data.email.lower() == request.auth.token.email.lower())
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
+        && request.resource.size() < 200000;
       allow delete: if prof();
     }
     match /avisos/{id} {
