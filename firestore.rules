@@ -20,8 +20,7 @@ service cloud.firestore {
       allow create, update: if liberado() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['lessons', 'quiz', 'rev', 'name', 'email', 'updated'])
         && (!('email' in request.resource.data) || request.resource.data.email == '' || request.resource.data.email.lower() == request.auth.token.email.lower())
-        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
-        && request.resource.size() < 200000;
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120));
       allow delete: if prof();
     }
     match /avisos/{id} {
