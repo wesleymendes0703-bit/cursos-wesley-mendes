@@ -16,6 +16,17 @@
       '<p id="gMsg" role="alert" style="color:var(--bad);margin:14px 0 0;font-size:14px">' + (msg || '') + '</p></div>';
     $('#gIn').onclick = entrar;
   }
+  function telaPendente(email, erro) {
+    const m = $('#main'); if (!m) return;
+    const nav = $('#nav'); if (nav) nav.style.display = 'none';
+    m.innerHTML = '<div class="card" style="max-width:440px;margin:40px auto;text-align:center;padding:28px 22px">' +
+      '<h1 style="font-size:22px;margin:0 0 8px">Acesso ainda não liberado</h1>' +
+      '<p style="color:var(--mute);margin:0 0 6px">Você entrou como <b></b>.</p>' +
+      '<p style="color:var(--mute);margin:0 0 16px">Peça ao professor para liberar este e-mail e depois recarregue a página.' + (erro ? ' (código: ' + erro + ')' : '') + '</p>' +
+      '<button class="btn" id="gRe" style="min-height:44px">Recarregar</button></div>';
+    m.querySelector('b').textContent = email;
+    $('#gRe').onclick = () => location.reload();
+  }
   let auth;
   async function entrar() {
     const prov = new firebase.auth.GoogleAuthProvider(); prov.setCustomParameters({prompt: 'select_account'});
@@ -41,9 +52,16 @@
       firebase.initializeApp(cfg); auth = firebase.auth();
       const db = firebase.firestore();
       auth.getRedirectResult().catch(() => {});
-      auth.onAuthStateChanged(u => {
-        if (u && u.email) { botaoSair(); res({u, db}); }
-        else telaLogin('');
+      auth.onAuthStateChanged(async u => {
+        if (!u || !u.email) { telaLogin(''); return; }
+        const email = u.email.toLowerCase();
+        botaoSair();
+        if (email !== PROF) {
+          let ok = false, erro = '';
+          try { ok = (await db.doc('acessos/' + email).get()).exists; } catch (e) { erro = e.code || 'erro'; }
+          if (!ok) { telaPendente(email, erro); return; }
+        }
+        res({u, db});
       });
     });
     return pronto;

@@ -1,18 +1,26 @@
 rules_version = '2';
-// Cursos do Prof. Wesley Mendes. Aluno lê e grava só o próprio progresso. O professor lê todos e publica avisos.
+// Cursos do Prof. Wesley Mendes. Só entra quem o professor liberou (coleção acessos). Aluno lê e grava só o próprio progresso. O professor lê todos e publica avisos.
 service cloud.firestore {
   match /databases/{database}/documents {
     function logado() { return request.auth != null && request.auth.token.email_verified == true; }
     function prof() { return logado() && request.auth.token.email.lower() == 'wesleymendes0703@gmail.com'; }
 
+    function liberado() { return prof() || (logado() && exists(/databases/$(database)/documents/acessos/$(request.auth.token.email.lower()))); }
+
+    // lista de alunos liberados: o professor gerencia, cada aluno só confere o próprio e-mail
+    match /acessos/{e} {
+      allow get: if logado() && (e == request.auth.token.email.lower() || prof());
+      allow list: if prof();
+      allow create, update, delete: if prof();
+    }
     match /progress/{uid} {
-      allow read: if prof() || (logado() && request.auth.uid == uid);
-      allow create, update: if logado() && request.auth.uid == uid
+      allow read: if prof() || (liberado() && request.auth.uid == uid);
+      allow create, update: if liberado() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['lessons', 'quiz', 'rev', 'name', 'email', 'updated']);
       allow delete: if prof();
     }
     match /avisos/{id} {
-      allow read: if logado();
+      allow read: if liberado();
       allow write: if prof();
     }
   }

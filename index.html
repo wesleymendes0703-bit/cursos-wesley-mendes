@@ -308,6 +308,7 @@ const bar=p=>`<div class="bar" role="progressbar" aria-valuenow="${p}" aria-valu
 function modeNotice(){
   if(ctx.mode==='leitura')return `<div class="notice">Você entrou, mas ainda sem permissão para salvar progresso na nuvem. Peça ao professor acesso de Colaborador. Enquanto isso, o progresso fica neste aparelho.</div>`;
   if(ctx.mode==='nuvem')return ctx.err?`<div class="notice" role="alert">Não consegui salvar na nuvem agora (${esc(ctx.err)}). Seu progresso fica neste aparelho e tentamos de novo.</div>`:'';
+  if(window.PROF_EMAIL)return `<div class="notice" role="alert">Não consegui falar com a nuvem agora. Seu progresso fica salvo neste aparelho. Recarregue a página para tentar de novo.</div>`;
   return `<div class="notice">Modo local: seu progresso fica salvo só neste navegador. Para salvar na nuvem e aparecer para o professor, abra este link entrando na sua conta Claude com acesso concedido pelo professor.</div>`;
 }
 const itemTitle=(t,id)=>t==='l'?LES[id].title:('Questão '+QS[id].n+' · '+QS[id].tema);
@@ -595,7 +596,7 @@ function vProg(m){
 }
 function vProf(m){
   if(!ctx.admin){m.innerHTML='<div class="card"><b>Área restrita.</b> Só o professor acessa este painel.</div>';return}
-  m.innerHTML=`<h1>Painel do professor</h1><div id="pa" class="stats"></div><h2>Aviso para a turma</h2><div class="card"><label for="av">Texto do aviso (aparece na página inicial dos alunos)</label><textarea id="av" rows="2" maxlength="300"></textarea><p><button class="btn" id="avs">Publicar aviso</button> <span id="avm" role="status"></span></p><div id="avl"></div></div><h2>Alunos</h2><div id="tb">Carregando…</div><h2>Desempenho por curso</h2><div id="cs"></div><h2>Desempenho por questão</h2><div id="qs"></div>`;
+  m.innerHTML=`<h1>Painel do professor</h1><div id="pa" class="stats"></div><h2>Aviso para a turma</h2><div class="card"><label for="av">Texto do aviso (aparece na página inicial dos alunos)</label><textarea id="av" rows="2" maxlength="300"></textarea><p><button class="btn" id="avs">Publicar aviso</button> <span id="avm" role="status"></span></p><div id="avl"></div></div>${window.PROF_EMAIL?`<h2>Acesso dos alunos</h2><div class="card"><label for="ac">E-mails Google liberados (um por linha)</label><textarea id="ac" rows="3" placeholder="aluno@gmail.com"></textarea><p><button class="btn" id="acs">Liberar</button> <span id="acm" role="status"></span></p><div id="acl"></div></div>`:''}<h2>Alunos</h2><div id="tb">Carregando…</div><h2>Desempenho por curso</h2><div id="cs"></div><h2>Desempenho por questão</h2><div id="qs"></div>`;
   let rows=[];const names={};
   const tm=setTimeout(()=>{$('#tb').textContent='Sem resposta do banco ainda. Se ninguém salvou progresso, a lista fica vazia.'},10000);
   const cnt=d=>{const nl=Object.values(d.lessons||{}).filter(v=>v>0).length;const qz=Object.entries(d.quiz||{}).filter(([k,v])=>v&&!v.x);return{nl,nq:qz.length,ok:qz.filter(([k,v])=>v.ok).length}};
@@ -616,6 +617,10 @@ function vProf(m){
     cleanup.push(ctx.db.collection('progress').onSnapshot(s=>{clearTimeout(tm);rows=s.docs.map(d=>({id:d.id,d:d.data()}));render()},e=>{clearTimeout(tm);$('#tb').textContent='Erro ao ler alunos: '+(e&&e.code)}));
     cleanup.push(ctx.db.collection('avisos').orderBy('t','desc').limit(5).onSnapshot(s=>{const el=$('#avl');if(!el)return;el.innerHTML='';s.docs.forEach(d=>{const p=document.createElement('p');p.textContent=d.data().texto+' ';const b=document.createElement('button');b.className='btn ghost';b.textContent='Remover';b.setAttribute('aria-label','Remover aviso: '+(d.data().texto||'').slice(0,40));b.onclick=async()=>{try{await ctx.db.doc('avisos/'+d.id).delete()}catch(e){$('#avm').textContent='Erro ao remover: '+(e&&e.code)}};p.appendChild(b);el.appendChild(p)})},()=>{}));
     $('#avs').onclick=async()=>{const t=$('#av').value.trim();if(!t)return;try{await ctx.db.collection('avisos').add({texto:t,t:Date.now()});$('#av').value='';$('#avm').textContent='Publicado.'}catch(e){$('#avm').textContent='Erro: '+(e&&e.code)}};
+    if(window.PROF_EMAIL){
+      cleanup.push(ctx.db.collection('acessos').onSnapshot(s=>{const el=$('#acl');if(!el)return;el.innerHTML='';const ids=s.docs.map(d=>d.id).sort();if(!ids.length)el.textContent='Nenhum aluno liberado ainda.';ids.forEach(id=>{const p=document.createElement('p');p.textContent=id+' ';const b=document.createElement('button');b.className='btn sec';b.textContent='Remover';b.setAttribute('aria-label','Remover acesso de '+id);b.onclick=()=>{if(confirm('Remover o acesso de '+id+'?'))ctx.db.doc('acessos/'+id).delete().catch(e=>{$('#acm').textContent='Erro: '+(e&&e.code)})};p.appendChild(b);el.appendChild(p)})},e=>{const el=$('#acl');if(el)el.textContent='Erro ao ler acessos: '+(e&&e.code)}));
+      $('#acs').onclick=async()=>{const ids=[...new Set($('#ac').value.toLowerCase().split(/[\s,;]+/).filter(x=>/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)))];if(!ids.length){$('#acm').textContent='Digite ao menos um e-mail válido.';return}try{for(const id of ids)await ctx.db.doc('acessos/'+id).set({criadoEm:Date.now()});$('#ac').value='';$('#acm').textContent=ids.length+' liberado(s).'}catch(e){$('#acm').textContent='Erro: '+(e&&e.code)}};
+    }
   }else{$('#tb').textContent='Banco indisponível nesta visualização.'}
 }
 init();
