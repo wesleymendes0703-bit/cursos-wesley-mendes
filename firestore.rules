@@ -35,6 +35,15 @@ service cloud.firestore {
       allow create, update: if prof() && request.resource.data.keys().hasOnly(['k']) && request.resource.data.k is string;
       allow delete: if prof();
     }
+    // vídeo (link do YouTube) de cada aula: lê quem tem o curso; só o professor grava
+    match /videos/{id} {
+      allow get: if prof() || (resource != null && curso(resource.data.curso));
+      allow list: if false;
+      allow create, update: if prof() && request.resource.data.keys().hasOnly(['url', 'curso', 't'])
+        && request.resource.data.url is string && request.resource.data.url.size() <= 200
+        && request.resource.data.curso is string && request.resource.data.curso.size() <= 20;
+      allow delete: if prof();
+    }
     match /avisos/{id} {
       allow read: if liberado();
       allow write: if prof();
